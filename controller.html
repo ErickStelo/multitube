@@ -59,6 +59,14 @@
             align-items: center;
             gap: 8px;
         }
+        .topbar-home {
+            color: var(--muted);
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: var(--t);
+        }
+        .topbar-home:hover { color: var(--red); background: var(--bg3); }
 
         .ws-pill {
             display: flex;
@@ -240,6 +248,8 @@
         }
         .video-item:last-child { border-bottom: none; }
         .video-item:active { background: var(--bg3); }
+        .video-item.dragging { opacity: 0.5; }
+        .video-item.drag-over { background: var(--bg3); border-left: 3px solid var(--red); }
 
         .video-thumb {
             width: 60px; height: 34px;
@@ -346,6 +356,65 @@
             font-size: 0.75rem;
             padding: 20px;
         }
+
+        /* ── Landing (criar/entrar sala) ─────────── */
+        .landing {
+            padding: 24px 16px;
+            max-width: 400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .landing h1 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .landing p {
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .landing .input-row { margin-bottom: 8px; }
+        .room-code-display {
+            font-family: monospace;
+            font-size: 1.8rem;
+            letter-spacing: 0.4em;
+            text-align: center;
+            padding: 20px;
+            background: var(--bg3);
+            border: 2px solid var(--red);
+            border-radius: 12px;
+            margin: 16px 0;
+            color: var(--green);
+        }
+        .share-section {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .share-section h3 {
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .share-link {
+            font-size: 0.8rem;
+            color: var(--blue);
+            word-break: break-all;
+            margin-bottom: 12px;
+        }
+        .share-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .footer-note a { color: var(--muted); text-decoration: none; }
+        .footer-note a:hover { color: var(--text); text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -354,6 +423,7 @@
 <div class="topbar">
     <div class="topbar-title">
         <i class="fas fa-gamepad" style="color:#e50000"></i> Controller
+        <a href="/" class="topbar-home" title="Voltar ao início"><i class="fas fa-home"></i></a>
     </div>
     <div class="ws-pill connecting" id="wsPill">
         <div class="ws-dot"></div>
@@ -364,8 +434,38 @@
 <!-- Toasts -->
 <div class="toasts" id="toastContainer"></div>
 
-<!-- Conteúdo -->
+<!-- Landing: Criar sala / Entrar com código (quando path = /controller) -->
+<div id="landingView" class="landing" style="display: none;">
+    <h1><i class="fas fa-door-open" style="color:var(--red)"></i> Sala de controle</h1>
+    <p>Crie uma nova sala ou entre com um código existente.</p>
+    <button class="btn btn-red" id="btnCreateRoom" style="width:100%">
+        <i class="fas fa-plus"></i> Criar nova sala
+    </button>
+    <div style="text-align:center; color:var(--muted); font-size:0.85rem;">ou</div>
+    <div class="input-row">
+        <input type="text" class="input-field" id="inputRoomCode" placeholder="Código da sala (6 caracteres)" maxlength="6" autocomplete="off">
+        <button class="btn btn-ghost" id="btnEnterRoom">Entrar</button>
+    </div>
+</div>
+
+<!-- Conteúdo da sala (quando path = /c/CODE) -->
+<div id="roomView" style="display: none;">
 <div class="content">
+
+    <!-- Código da sala e link para TV -->
+    <div id="roomCodeShareSection" class="share-section">
+        <h3><i class="fas fa-tv"></i> Código da sala · Link para a TV</h3>
+        <div class="room-name-row" style="margin-bottom:10px;">
+            <label for="roomNameInput" style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:4px;">Nome da sala (opcional)</label>
+            <input type="text" class="input-field" id="roomNameInput" placeholder="Ex: Sala da família" maxlength="80" autocomplete="off" style="font-size:0.9rem;">
+        </div>
+        <div class="room-code-display" id="roomCodeDisplay">------</div>
+        <div class="share-link" id="shareLinkText"></div>
+        <div class="share-actions">
+            <button class="btn btn-ghost btn-sm" id="btnCopyLink"><i class="fas fa-link"></i> Copiar link</button>
+            <button class="btn btn-ghost btn-sm" id="btnCopyCode"><i class="fas fa-copy"></i> Copiar código</button>
+        </div>
+    </div>
 
     <!-- Adicionar vídeo -->
     <div class="card">
@@ -393,6 +493,14 @@
     <button class="btn-sync" id="syncAllBtn">
         <i class="fas fa-rotate"></i> Sincronizar Todos ao Vivo
     </button>
+    <div class="sync-btn-wrap" style="display:flex;gap:10px;padding:0 16px 16px;">
+        <button class="btn btn-ghost" id="playAllBtn" style="flex:1;">
+            <i class="fas fa-play"></i> Reproduzir todos
+        </button>
+        <button class="btn btn-ghost" id="pauseAllBtn" style="flex:1;">
+            <i class="fas fa-pause"></i> Pausar todos
+        </button>
+    </div>
 
     <!-- Lista de vídeos -->
     <div class="card">
@@ -408,13 +516,71 @@
         </div>
     </div>
 
-    <div class="footer-note">MultiTube Controller · Rede Local</div>
+    <div class="footer-note">MultiTube Controller · Salas por código</div>
+    <div class="footer-note">
+        © 2026 Erick Stelo · <a href="https://github.com/ErickStelo" target="_blank" rel="noopener">GitHub</a> · <a href="https://discord.com/users/252821946625032192" target="_blank" rel="noopener">Discord</a> · <a href="/">Voltar ao início</a>
+    </div>
 </div>
+</div>
+<!-- fim roomView -->
 
 <script>
+    const ROOM_CODE_REGEX = /^[A-Z0-9]{6}$/;
+    function generateRoomCode() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        return code;
+    }
+    function normalizeRoomCode(str) {
+        return (str || '').toString().toUpperCase().replace(/\s/g, '').slice(0, 6);
+    }
+    function getRoomCodeFromPath() {
+        const match = location.pathname.match(/^\/c\/([A-Z0-9]{6})$/i);
+        return match ? match[1].toUpperCase() : null;
+    }
+    function showLandingOrRoom() {
+        const code = getRoomCodeFromPath();
+        const landingEl = document.getElementById('landingView');
+        const roomEl = document.getElementById('roomView');
+        if (!code) {
+            landingEl.style.display = 'block';
+            roomEl.style.display = 'none';
+            return null;
+        }
+        landingEl.style.display = 'none';
+        roomEl.style.display = 'block';
+        return code;
+    }
+    function renderRoomCodeAndShare(code) {
+        document.getElementById('roomCodeDisplay').textContent = code;
+        const link = `${location.protocol}//${location.host}/view/${code}`;
+        document.getElementById('shareLinkText').textContent = link;
+        document.getElementById('btnCopyLink').onclick = () => {
+            navigator.clipboard.writeText(link).then(() => toast('Link copiado!', 'ok')).catch(() => toast('Falha ao copiar', 'fail'));
+        };
+        document.getElementById('btnCopyCode').onclick = () => {
+            navigator.clipboard.writeText(code).then(() => toast('Código copiado!', 'ok')).catch(() => toast('Falha ao copiar', 'fail'));
+        };
+        const nameEl = document.getElementById('roomNameInput');
+        if (nameEl) {
+            nameEl.addEventListener('change', () => {
+                const v = nameEl.value.trim().slice(0, 80);
+                send({ type: 'set_room_name', roomName: v });
+            });
+            nameEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { nameEl.blur(); }
+            });
+        }
+    }
+
     // ── Estado ────────────────────────────────────────────────────────
-    let state = { videos: [], muted: [], focusedVideo: null };
+    let state = { videos: [], muted: [], startSeconds: [], focusedVideo: null };
     let ws    = null;
+    let roomCode = null;
+    let reconnectAttempts = 0;
+    const RECONNECT_MAX_DELAY_MS = 30000;
+    const RECONNECT_BASE_MS = 2000;
 
     // ── Toast ─────────────────────────────────────────────────────────
     function toast(msg, type = 'info', dur = 2500) {
@@ -426,10 +592,14 @@
         setTimeout(() => el.remove(), dur);
     }
 
-    // ── WebSocket ─────────────────────────────────────────────────────
+    // ── WebSocket (conecta com ?room=CODE) ─────────────────────────────
     function connectWS() {
+        roomCode = getRoomCodeFromPath();
+        if (!roomCode) return;
+
         const proto  = location.protocol === 'https:' ? 'wss' : 'ws';
-        ws = new WebSocket(`${proto}://${location.host}`);
+        const wsUrl  = `${proto}://${location.host}?room=${encodeURIComponent(roomCode)}`;
+        ws = new WebSocket(wsUrl);
         const pill  = document.getElementById('wsPill');
         const label = document.getElementById('wsLabel');
 
@@ -437,6 +607,7 @@
         label.textContent = 'Conectando';
 
         ws.onopen = () => {
+            reconnectAttempts = 0;
             pill.className   = 'ws-pill connected';
             label.textContent = 'Conectado';
             ws.send(JSON.stringify({ type: 'get_state' }));
@@ -450,7 +621,11 @@
         ws.onclose = () => {
             pill.className   = 'ws-pill disconnected';
             label.textContent = 'Reconectando...';
-            setTimeout(connectWS, 3000);
+            if (getRoomCodeFromPath()) {
+                const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_DELAY_MS);
+                reconnectAttempts++;
+                setTimeout(connectWS, delay);
+            }
         };
 
         ws.onerror = () => ws.close();
@@ -470,9 +645,16 @@
             state = {
                 videos: msg.videos || [],
                 muted: msg.muted || [],
+                startSeconds: Array.isArray(msg.startSeconds) ? msg.startSeconds : [],
                 focusedVideo: msg.focusedVideo !== undefined ? msg.focusedVideo : null
             };
+            while (state.startSeconds.length < state.videos.length) state.startSeconds.push(0);
+            while (state.startSeconds.length > state.videos.length) state.startSeconds.pop();
             renderList();
+            const nameEl = document.getElementById('roomNameInput');
+            if (nameEl && typeof msg.roomName === 'string' && nameEl.value !== msg.roomName) {
+                nameEl.value = msg.roomName;
+            }
         }
         if (msg.type === 'toggle_mute') {
             state.muted[msg.index] = msg.muted;
@@ -485,6 +667,10 @@
         }
         if (msg.type === 'error') {
             toast(msg.message, 'fail');
+        }
+        if (msg.type === 'room_not_found') {
+            toast('Sala não encontrada ou foi removida.', 'fail', 5000);
+            setTimeout(() => { location.href = '/controller'; }, 2000);
         }
     }
 
@@ -579,6 +765,8 @@
 
             const item = document.createElement('div');
             item.className = `video-item${focused ? ' is-focused' : ''}`;
+            item.draggable = true;
+            item.dataset.index = String(i);
             item.innerHTML = `
                 <div class="video-thumb">
                     <img
@@ -629,8 +817,62 @@
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>`;
+            item.addEventListener('dragstart', onDragStart);
+            item.addEventListener('dragover', onDragOver);
+            item.addEventListener('drop', onDrop);
+            item.addEventListener('dragend', onDragEnd);
             list.appendChild(item);
         });
+    }
+
+    let draggedIndex = null;
+
+    function onDragStart(e) {
+        const idx = e.currentTarget.dataset.index;
+        if (idx === undefined) return;
+        draggedIndex = parseInt(idx, 10);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', idx);
+        e.currentTarget.classList.add('dragging');
+    }
+
+    function onDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.currentTarget;
+        if (target.classList.contains('video-item')) target.classList.add('drag-over');
+    }
+
+    function onDrop(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        const toIndex = parseInt(e.currentTarget.dataset.index, 10);
+        if (draggedIndex === null || draggedIndex === toIndex) return;
+        const newVideos = [...state.videos];
+        const newMuted = [...state.muted];
+        const newStart = Array.isArray(state.startSeconds) ? [...state.startSeconds] : state.videos.map(() => 0);
+        while (newStart.length < newVideos.length) newStart.push(0);
+        const [removedV] = newVideos.splice(draggedIndex, 1);
+        const [removedM] = newMuted.splice(draggedIndex, 1);
+        const [removedS] = newStart.splice(draggedIndex, 1);
+        newVideos.splice(toIndex, 0, removedV);
+        newMuted.splice(toIndex, 0, removedM);
+        newStart.splice(toIndex, 0, removedS);
+        const newFocused = state.focusedVideo === null ? null
+            : newVideos.indexOf(state.videos[state.focusedVideo]);
+        if (newFocused === -1) state.focusedVideo = null;
+        else state.focusedVideo = newFocused;
+        state.videos = newVideos;
+        state.muted = newMuted;
+        state.startSeconds = newStart;
+        send({ type: 'reorder_videos', videos: state.videos, muted: state.muted, startSeconds: state.startSeconds, focusedVideo: state.focusedVideo });
+        renderList();
+    }
+
+    function onDragEnd(e) {
+        e.currentTarget.classList.remove('dragging');
+        document.querySelectorAll('.video-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+        draggedIndex = null;
     }
 
     // ── Event listeners ───────────────────────────────────────────────
@@ -639,9 +881,31 @@
         if (e.key === 'Enter') addVideo();
     });
     document.getElementById('syncAllBtn').addEventListener('click', syncAll);
+    document.getElementById('playAllBtn').addEventListener('click', () => send({ type: 'play_pause_all', play: true }));
+    document.getElementById('pauseAllBtn').addEventListener('click', () => send({ type: 'play_pause_all', play: false }));
 
-    // ── Init ──────────────────────────────────────────────────────────
-    connectWS();
+    document.getElementById('btnCreateRoom').addEventListener('click', () => {
+        const code = generateRoomCode();
+        location.href = '/c/' + code;
+    });
+    document.getElementById('btnEnterRoom').addEventListener('click', () => {
+        const raw = document.getElementById('inputRoomCode').value;
+        const code = normalizeRoomCode(raw);
+        if (!ROOM_CODE_REGEX.test(code)) {
+            toast('Código inválido. Use 6 caracteres (A-Z ou 0-9).', 'fail');
+            return;
+        }
+        location.href = '/c/' + code;
+    });
+    document.getElementById('inputRoomCode').addEventListener('keypress', e => {
+        if (e.key === 'Enter') document.getElementById('btnEnterRoom').click();
+    });
+
+    const code = showLandingOrRoom();
+    if (code) {
+        renderRoomCodeAndShare(code);
+        connectWS();
+    }
 </script>
 </body>
 </html>

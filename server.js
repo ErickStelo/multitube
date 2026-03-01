@@ -4,125 +4,285 @@ const WebSocket = require('ws');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const url = require('url');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const PORT = 3031;
+const PORT = Number(process.env.PORT) || 3031;
+const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'state.json');
 
-// ─── Persistência em disco ──────────────────────────────────────────────────
-const STATE_FILE = path.join(__dirname, 'state.json');
+const ROOM_CODE_REGEX = /^[A-Z0-9]{6}$/;
+const PERSISTENT_KEYS = ['videos', 'muted', 'startSeconds', 'roomName'];
+const MAX_VIDEOS_PER_ROOM = 12;
 
-// Campos que SÃO persistidos (focusedVideo é estado de UI, não salvo)
-const PERSISTENT_KEYS = ['videos', 'muted'];
+const CLEANUP_INTERVAL_MS = process.env.CLEANUP_INTERVAL_MS ? Number(process.env.CLEANUP_INTERVAL_MS) : 0;
+const ROOM_IDLE_TIMEOUT_MS = process.env.ROOM_IDLE_TIMEOUT_MS
+    ? Number(process.env.ROOM_IDLE_TIMEOUT_MS)
+    : 30 * 60 * 1000;
 
-function loadState() {
+const isProduction = process.env.NODE_ENV === 'production';
+
+function log(level, message, meta = {}) {
+    const payload = { timestamp: new Date().toISOString(), level, message, ...meta };
+    if (isProduction) {
+        console.log(JSON.stringify(payload));
+    } else {
+        const metaStr = Object.keys(meta).length ? ' ' + JSON.stringify(meta) : '';
+        console.log(`[${payload.timestamp}] [${level}] ${message}${metaStr}`);
+    }
+}
+
+const lastActivityByRoom = new Map();
+const deletedRoomCodes = new Set();
+
+function loadAllStates() {
     try {
         if (fs.existsSync(STATE_FILE)) {
-            const raw  = fs.readFileSync(STATE_FILE, 'utf8');
+            const raw = fs.readFileSync(STATE_FILE, 'utf8');
             const saved = JSON.parse(raw);
-            console.log(`[Cache] Estado restaurado: ${saved.videos?.length ?? 0} vídeo(s)`);
-            return {
-                videos:       Array.isArray(saved.videos) ? saved.videos : [],
-                muted:        Array.isArray(saved.muted)  ? saved.muted  : [],
-                focusedVideo: null   // sempre reinicia sem fullscreen
-            };
+            const result = {};
+            for (const [code, data] of Object.entries(saved)) {
+                if (!ROOM_CODE_REGEX.test(code) || !data || typeof data !== 'object') continue;
+                result[code] = {
+                    videos: Array.isArray(data.videos) ? data.videos : [],
+                    muted: Array.isArray(data.muted) ? data.muted : [],
+                    startSeconds: Array.isArray(data.startSeconds) ? data.startSeconds : [],
+                    roomName: typeof data.roomName === 'string' ? data.roomName : '',
+                    focusedVideo: null,
+                };
+                const s = result[code];
+                while (s.startSeconds.length < s.videos.length) s.startSeconds.push(0);
+                while (s.startSeconds.length > s.videos.length) s.startSeconds.pop();
+            }
+            log('info', 'Estado restaurado', { rooms: Object.keys(result).length });
+            return result;
         }
     } catch (err) {
-        console.warn('[Cache] Falha ao carregar state.json:', err.message);
+        log('warn', 'Falha ao carregar state.json', { error: err.message });
     }
-    return { videos: [], muted: [], focusedVideo: null };
+    return {};
 }
 
-// Debounce: evita escrever disco a cada mensagem em rajada
+const states = loadAllStates();
+
 let _saveTimer = null;
-function saveState() {
+
+function saveAllStatesSync() {
+    const toSave = {};
+    for (const [code, state] of Object.entries(states)) {
+        toSave[code] = {};
+        PERSISTENT_KEYS.forEach((k) => {
+            toSave[code][k] = state[k];
+        });
+    }
+    const tmpFile = STATE_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, JSON.stringify(toSave, null, 2), 'utf8');
+    fs.renameSync(tmpFile, STATE_FILE);
+}
+
+function saveAllStates() {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => {
-        const toSave = {};
-        PERSISTENT_KEYS.forEach(k => { toSave[k] = state[k]; });
-        fs.writeFile(STATE_FILE, JSON.stringify(toSave, null, 2), (err) => {
-            if (err) console.error('[Cache] Falha ao salvar state.json:', err.message);
-            else     console.log(`[Cache] Estado salvo (${state.videos.length} vídeo(s))`);
-        });
-    }, 400); // 400 ms de debounce
+        try {
+            saveAllStatesSync();
+            log('info', 'Estado salvo', { rooms: Object.keys(states).length });
+        } catch (err) {
+            log('error', 'Falha ao salvar state.json', { error: err.message });
+        }
+    }, 400);
 }
 
-// ─── Estado global da aplicação ────────────────────────────────────────────
-let state = loadState();
+function getOrCreateRoom(code) {
+    if (!states[code]) {
+        states[code] = { videos: [], muted: [], startSeconds: [], roomName: '', focusedVideo: null };
+        deletedRoomCodes.delete(code);
+        log('info', 'Sala criada', { room: code });
+    }
+    lastActivityByRoom.set(code, Date.now());
+    const s = states[code];
+    if (!Array.isArray(s.startSeconds)) s.startSeconds = [];
+    while (s.startSeconds.length < s.videos.length) s.startSeconds.push(0);
+    while (s.startSeconds.length > s.videos.length) s.startSeconds.pop();
+    if (typeof s.roomName !== 'string') s.roomName = '';
+    return states[code];
+}
 
-// ─── Servir arquivos estáticos ──────────────────────────────────────────────
-app.use(express.static(path.join(__dirname)));
-app.use(express.json());
-
-// Rota raiz → TV (MultiTube)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'multiview.html'));
-});
-
-// Rota do controller
-app.get('/controller', (req, res) => {
-    res.sendFile(path.join(__dirname, 'controller.html'));
-});
-
-// API REST para obter estado atual
-app.get('/api/state', (req, res) => {
-    res.json(state);
-});
-
-// API REST para limpar todos os vídeos salvos
-app.delete('/api/state', (req, res) => {
-    state.videos       = [];
-    state.muted        = [];
-    state.focusedVideo = null;
-    saveState();
-    broadcastAll({ type: 'state', ...state });
-    res.json({ ok: true, message: 'Estado limpo com sucesso' });
-    console.log('[Cache] Estado limpo via API');
-});
-
-// ─── Broadcast para todos os clientes ──────────────────────────────────────
-function broadcast(message, exclude = null) {
+function broadcastToRoom(roomId, message, exclude = null) {
     const data = JSON.stringify(message);
-    wss.clients.forEach(client => {
-        if (client !== exclude && client.readyState === WebSocket.OPEN) {
+    wss.clients.forEach((client) => {
+        if (client.roomId === roomId && client !== exclude && client.readyState === WebSocket.OPEN) {
             client.send(data);
         }
     });
 }
 
-// Broadcast para todos (inclui o remetente)
-function broadcastAll(message) {
-    const data = JSON.stringify(message);
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(data);
-        }
+function countClientsInRoom(roomId) {
+    let n = 0;
+    wss.clients.forEach((client) => {
+        if (client.roomId === roomId && client.readyState === WebSocket.OPEN) n++;
     });
+    return n;
 }
 
-// ─── Função para extrair videoId de URL do YouTube ─────────────────────────
-function extractVideoId(url) {
-    if (!url) return null;
-    url = url.trim();
+function extractVideoId(urlStr) {
+    if (!urlStr) return null;
+    urlStr = urlStr.trim();
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-        /^([a-zA-Z0-9_-]{11})$/
+        /^([a-zA-Z0-9_-]{11})$/,
     ];
     for (const pattern of patterns) {
-        const match = url.match(pattern);
+        const match = urlStr.match(pattern);
         if (match && match[1]) return match[1];
     }
     return null;
 }
 
-// ─── WebSocket: gerenciar conexões ─────────────────────────────────────────
-wss.on('connection', (ws, req) => {
-    const ip = req.socket.remoteAddress;
-    console.log(`[WS] Cliente conectado: ${ip}`);
+/** Extrai segundos de início da URL (t=90, t=90s, start=90). Retorna 0 se ausente ou inválido. */
+function extractStartSeconds(urlStr) {
+    if (!urlStr || typeof urlStr !== 'string') return 0;
+    const tMatch = urlStr.match(/[?&]t=(\d+)/i) || urlStr.match(/[?&]t=(\d+)s/i);
+    if (tMatch) return Math.max(0, parseInt(tMatch[1], 10) || 0);
+    const startMatch = urlStr.match(/[?&]start=(\d+)/i);
+    if (startMatch) return Math.max(0, parseInt(startMatch[1], 10) || 0);
+    return 0;
+}
 
-    // Enviar estado atual para o novo cliente
+if (CLEANUP_INTERVAL_MS > 0 && ROOM_IDLE_TIMEOUT_MS > 0) {
+    setInterval(() => {
+        const now = Date.now();
+        const toRemove = [];
+        for (const [code, lastActivity] of lastActivityByRoom) {
+            if (countClientsInRoom(code) === 0 && now - lastActivity >= ROOM_IDLE_TIMEOUT_MS) {
+                toRemove.push(code);
+            }
+        }
+        toRemove.forEach((code) => {
+            delete states[code];
+            lastActivityByRoom.delete(code);
+            deletedRoomCodes.add(code);
+            log('info', 'Sala removida por inatividade', { room: code });
+        });
+        if (toRemove.length) saveAllStates();
+    }, CLEANUP_INTERVAL_MS);
+}
+
+app.use(express.json());
+
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+app.use(
+    helmet({
+        contentSecurityPolicy: false,
+        crossOriginOpenerPolicy: false,
+        crossOriginEmbedderPolicy: false,
+        originAgentCluster: false,
+        referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    })
+);
+
+app.get('/health', (req, res) => {
+    res.status(200).json({ ok: true, rooms: Object.keys(states).length });
+});
+
+app.use(limiter);
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/view', (req, res) => {
+    res.sendFile(path.join(__dirname, 'multiview.html'));
+});
+
+app.get('/view/:code', (req, res) => {
+    const code = (req.params.code || '').toUpperCase();
+    if (!ROOM_CODE_REGEX.test(code)) {
+        res.redirect('/view');
+        return;
+    }
+    res.sendFile(path.join(__dirname, 'multiview.html'));
+});
+
+app.get('/controller', (req, res) => {
+    res.sendFile(path.join(__dirname, 'controller.html'));
+});
+
+app.get('/c/:code', (req, res) => {
+    const code = (req.params.code || '').toUpperCase();
+    if (!ROOM_CODE_REGEX.test(code)) {
+        res.redirect('/controller');
+        return;
+    }
+    res.sendFile(path.join(__dirname, 'controller.html'));
+});
+
+app.get('/api/state', (req, res) => {
+    const code = (req.query.room || '').toUpperCase();
+    if (!ROOM_CODE_REGEX.test(code)) {
+        return res.status(400).json({ error: 'Código de sala inválido' });
+    }
+    const state = states[code];
+    if (!state) return res.json({ videos: [], muted: [], startSeconds: [], roomName: '', focusedVideo: null });
+    res.json(state);
+});
+
+app.delete('/api/state', (req, res) => {
+    const code = (req.query.room || '').toUpperCase();
+    if (!ROOM_CODE_REGEX.test(code)) {
+        return res.status(400).json({ error: 'Código de sala inválido' });
+    }
+    if (states[code]) {
+        states[code].videos = [];
+        states[code].muted = [];
+        states[code].startSeconds = [];
+        states[code].focusedVideo = null;
+        saveAllStates();
+        broadcastToRoom(code, { type: 'state', ...states[code] });
+    }
+    res.json({ ok: true, message: 'Estado da sala limpo com sucesso' });
+});
+
+app.use(express.static(path.join(__dirname)));
+
+wss.on('connection', (ws, req) => {
+    const parsed = url.parse(req.url || '', true);
+    const room = (parsed.query && parsed.query.room ? parsed.query.room : '').toString().toUpperCase().trim();
+
+    if (!ROOM_CODE_REGEX.test(room)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Código de sala inválido. Use 6 caracteres A-Z ou 0-9.' }));
+        ws.close();
+        return;
+    }
+
+    if (deletedRoomCodes.has(room)) {
+        ws.send(JSON.stringify({ type: 'room_not_found', message: 'Sala não encontrada ou foi removida.' }));
+        ws.close();
+        return;
+    }
+
+    if (!states[room]) {
+        getOrCreateRoom(room);
+    } else {
+        lastActivityByRoom.set(room, Date.now());
+    }
+
+    ws.roomId = room;
+    const state = states[room];
+    const ip = req.socket.remoteAddress;
+    log('info', 'Cliente conectado', { ip, room });
+
     ws.send(JSON.stringify({ type: 'state', ...state }));
 
     ws.on('message', (raw) => {
@@ -130,177 +290,229 @@ wss.on('connection', (ws, req) => {
         try {
             msg = JSON.parse(raw);
         } catch {
-            console.error('[WS] Mensagem inválida:', raw);
+            log('warn', 'Mensagem inválida', { raw: String(raw).slice(0, 100) });
             return;
         }
 
-        console.log('[WS] Mensagem recebida:', msg);
+        const roomState = states[ws.roomId];
+        if (!roomState) return;
+
+        lastActivityByRoom.set(ws.roomId, Date.now());
 
         switch (msg.type) {
-
-            // ── Adicionar vídeo ─────────────────────────────────────────
             case 'add_video': {
-                const videoId = extractVideoId(msg.url || msg.videoId || '');
+                if (roomState.videos.length >= MAX_VIDEOS_PER_ROOM) {
+                    ws.send(
+                        JSON.stringify({
+                            type: 'error',
+                            message: `Máximo de ${MAX_VIDEOS_PER_ROOM} vídeos por sala. Remova um para adicionar outro.`,
+                        })
+                    );
+                    return;
+                }
+                const urlInput = msg.url || msg.videoId || '';
+                const videoId = extractVideoId(urlInput);
                 if (!videoId) {
                     ws.send(JSON.stringify({ type: 'error', message: 'URL inválida do YouTube' }));
                     return;
                 }
-                if (state.videos.includes(videoId)) {
+                if (roomState.videos.includes(videoId)) {
                     ws.send(JSON.stringify({ type: 'error', message: 'Vídeo já adicionado' }));
                     return;
                 }
-                state.videos.push(videoId);
-                state.muted.push(true); // inicia mutado
-                saveState();
-                broadcastAll({ type: 'state', ...state });
+                const startSec = typeof msg.start === 'number' && msg.start >= 0 ? Math.floor(msg.start) : extractStartSeconds(urlInput);
+                roomState.videos.push(videoId);
+                roomState.muted.push(true);
+                roomState.startSeconds.push(startSec);
+                saveAllStates();
+                broadcastToRoom(ws.roomId, { type: 'state', ...roomState });
                 break;
             }
 
-            // ── Remover vídeo ───────────────────────────────────────────
             case 'remove_video': {
                 const idx = parseInt(msg.index);
-                if (idx < 0 || idx >= state.videos.length) {
+                if (idx < 0 || idx >= roomState.videos.length) {
                     ws.send(JSON.stringify({ type: 'error', message: 'Índice inválido' }));
                     return;
                 }
-                state.videos.splice(idx, 1);
-                state.muted.splice(idx, 1);
-                // Ajustar focusedVideo após remoção
-                if (state.focusedVideo === idx) {
-                    state.focusedVideo = null;
-                } else if (state.focusedVideo !== null && state.focusedVideo > idx) {
-                    state.focusedVideo--;
+                roomState.videos.splice(idx, 1);
+                roomState.muted.splice(idx, 1);
+                if (Array.isArray(roomState.startSeconds) && idx < roomState.startSeconds.length) {
+                    roomState.startSeconds.splice(idx, 1);
                 }
-                saveState();
-                broadcastAll({ type: 'state', ...state });
+                if (roomState.focusedVideo === idx) {
+                    roomState.focusedVideo = null;
+                } else if (roomState.focusedVideo !== null && roomState.focusedVideo > idx) {
+                    roomState.focusedVideo--;
+                }
+                saveAllStates();
+                broadcastToRoom(ws.roomId, { type: 'state', ...roomState });
                 break;
             }
 
-            // ── Reordenar vídeos ────────────────────────────────────────
             case 'reorder_videos': {
                 if (!Array.isArray(msg.videos) || !Array.isArray(msg.muted)) return;
-                state.videos = msg.videos;
-                state.muted = msg.muted;
-                saveState();
-                broadcastAll({ type: 'state', ...state });
+                roomState.videos = msg.videos;
+                roomState.muted = msg.muted;
+                if (Array.isArray(msg.startSeconds) && msg.startSeconds.length === msg.videos.length) {
+                    roomState.startSeconds = msg.startSeconds;
+                } else if (Array.isArray(roomState.startSeconds)) {
+                    while (roomState.startSeconds.length < roomState.videos.length) roomState.startSeconds.push(0);
+                    while (roomState.startSeconds.length > roomState.videos.length) roomState.startSeconds.pop();
+                } else {
+                    roomState.startSeconds = roomState.videos.map(() => 0);
+                }
+                if (msg.focusedVideo !== undefined && (msg.focusedVideo === null || (Number.isInteger(msg.focusedVideo) && msg.focusedVideo >= 0 && msg.focusedVideo < roomState.videos.length))) {
+                    roomState.focusedVideo = msg.focusedVideo;
+                }
+                saveAllStates();
+                broadcastToRoom(ws.roomId, { type: 'state', ...roomState });
                 break;
             }
 
-            // ── Mutar/desmutar vídeo individual ─────────────────────────
             case 'toggle_mute': {
                 const idx = parseInt(msg.index);
-                if (idx < 0 || idx >= state.videos.length) return;
-                state.muted[idx] = !state.muted[idx];
-                saveState();
-                broadcastAll({
+                if (idx < 0 || idx >= roomState.videos.length) return;
+                roomState.muted[idx] = !roomState.muted[idx];
+                saveAllStates();
+                broadcastToRoom(ws.roomId, {
                     type: 'toggle_mute',
                     index: idx,
-                    muted: state.muted[idx]
+                    muted: roomState.muted[idx],
                 });
                 break;
             }
 
-            // ── Definir mute explicitamente ─────────────────────────────
             case 'set_mute': {
                 const idx = parseInt(msg.index);
-                if (idx < 0 || idx >= state.videos.length) return;
-                state.muted[idx] = !!msg.muted;
-                saveState();
-                broadcastAll({
+                if (idx < 0 || idx >= roomState.videos.length) return;
+                roomState.muted[idx] = !!msg.muted;
+                saveAllStates();
+                broadcastToRoom(ws.roomId, {
                     type: 'toggle_mute',
                     index: idx,
-                    muted: state.muted[idx]
+                    muted: roomState.muted[idx],
                 });
                 break;
             }
 
-            // ── Sincronizar vídeo individual ao vivo ────────────────────
             case 'sync_video': {
                 const idx = parseInt(msg.index);
-                if (idx < 0 || idx >= state.videos.length) return;
-                broadcastAll({ type: 'sync_video', index: idx });
+                if (idx < 0 || idx >= roomState.videos.length) return;
+                broadcastToRoom(ws.roomId, { type: 'sync_video', index: idx });
                 break;
             }
 
-            // ── Sincronizar TODOS ao vivo ────────────────────────────────
             case 'sync_all': {
-                broadcastAll({ type: 'sync_all' });
+                broadcastToRoom(ws.roomId, { type: 'sync_all' });
                 break;
             }
 
-            // ── Focar vídeo em fullscreen ────────────────────────────────
+            case 'play_pause_all': {
+                const play = typeof msg.play === 'boolean' ? msg.play : true;
+                broadcastToRoom(ws.roomId, { type: 'play_pause_all', play });
+                break;
+            }
+
             case 'focus_video': {
                 const idx = msg.index;
 
                 if (idx === null || idx === undefined) {
-                    // Sair do fullscreen — restaurar mutes anteriores
-                    state.focusedVideo = null;
-                    broadcastAll({ type: 'focus_video', index: null, muted: state.muted });
+                    roomState.focusedVideo = null;
+                    broadcastToRoom(ws.roomId, { type: 'focus_video', index: null, muted: roomState.muted });
                     break;
                 }
 
                 const i = parseInt(idx);
-                if (i < 0 || i >= state.videos.length) return;
+                if (i < 0 || i >= roomState.videos.length) return;
 
-                state.focusedVideo = i;
-                // Desmutar o vídeo focado, mutar todos os demais
-                state.muted = state.muted.map((_, j) => j !== i);
-                saveState();
-
-                broadcastAll({ type: 'focus_video', index: i, muted: [...state.muted] });
+                roomState.focusedVideo = i;
+                roomState.muted = roomState.muted.map((_, j) => j !== i);
+                saveAllStates();
+                broadcastToRoom(ws.roomId, { type: 'focus_video', index: i, muted: [...roomState.muted] });
                 break;
             }
 
-            // ── Solicitar estado atual ────────────────────────────────────
             case 'get_state': {
-                ws.send(JSON.stringify({ type: 'state', ...state }));
+                ws.send(JSON.stringify({ type: 'state', ...roomState }));
+                break;
+            }
+
+            case 'set_room_name': {
+                roomState.roomName = typeof msg.roomName === 'string' ? msg.roomName.trim().slice(0, 80) : '';
+                saveAllStates();
+                broadcastToRoom(ws.roomId, { type: 'state', ...roomState });
                 break;
             }
 
             default:
-                console.warn('[WS] Tipo desconhecido:', msg.type);
+                log('warn', 'Tipo desconhecido', { type: msg.type });
         }
     });
 
     ws.on('close', () => {
-        console.log(`[WS] Cliente desconectado: ${ip}`);
+        log('info', 'Cliente desconectado', { ip, room: ws.roomId });
     });
 
     ws.on('error', (err) => {
-        console.error('[WS] Erro:', err.message);
+        log('error', 'Erro WS', { message: err.message });
     });
 });
 
-// ─── Iniciar servidor ───────────────────────────────────────────────────────
+function shutdown() {
+    log('info', 'Encerrando servidor (graceful shutdown)');
+    clearTimeout(_saveTimer);
+    try {
+        saveAllStatesSync();
+    } catch (err) {
+        log('error', 'Falha ao salvar estado no shutdown', { error: err.message });
+    }
+    server.close(() => {
+        log('info', 'Servidor fechado');
+        process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10000);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 server.listen(PORT, '0.0.0.0', () => {
     const interfaces = os.networkInterfaces();
     const ips = [];
 
-    Object.values(interfaces).forEach(iface => {
-        iface.forEach(details => {
+    Object.values(interfaces).forEach((iface) => {
+        iface.forEach((details) => {
             if (details.family === 'IPv4' && !details.internal) {
                 ips.push(details.address);
             }
         });
     });
 
-    console.log('\n========================================');
-    console.log('   🎬  MultiTube — YouTube Controller   ');
-    console.log('========================================');
-    console.log(`\n📺  TV (MultiTube):   http://localhost:${PORT}`);
-    console.log(`📱  Celular (Ctrl):   http://localhost:${PORT}/controller`);
-    if (ips.length > 0) {
-        console.log('\n🌐  Na rede local:');
-        ips.forEach(ip => {
-            console.log(`     📺 TV:    http://${ip}:${PORT}`);
-            console.log(`     📱 Ctrl:  http://${ip}:${PORT}/controller`);
-        });
+    const roomCount = Object.keys(states).length;
+    log('info', 'MultiTube iniciado', {
+        port: PORT,
+        stateFile: STATE_FILE,
+        rooms: roomCount,
+        home: `http://localhost:${PORT}`,
+        controller: `http://localhost:${PORT}/controller`,
+        view: `http://localhost:${PORT}/view`,
+    });
+    if (!isProduction) {
+        console.log('\n========================================');
+        console.log('   🎬  MultiTube — Salas por código     ');
+        console.log('========================================');
+        console.log(`\n🏠  Home:        http://localhost:${PORT}`);
+        console.log(`📱  Controller:  http://localhost:${PORT}/controller`);
+        console.log(`📺  Cinema:      http://localhost:${PORT}/view`);
+        if (ips.length > 0) {
+            console.log('\n🌐  Na rede local:');
+            ips.forEach((ip) => {
+                console.log(`     http://${ip}:${PORT}`);
+            });
+        }
+        console.log(`\n💾  Cache: ${STATE_FILE}`);
+        console.log(`📋  Salas em cache: ${roomCount}`);
+        console.log('\n========================================\n');
     }
-    console.log(`\n💾  Cache: ${STATE_FILE}`);
-    console.log(`📋  Vídeos em cache: ${state.videos.length}`);
-    if (state.videos.length > 0) {
-        state.videos.forEach((id, i) => console.log(`     ${i + 1}. ${id}`));
-    }
-    console.log('\n========================================\n');
 });
-

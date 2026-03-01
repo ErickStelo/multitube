@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>MultiTube — Início</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+    <style>
+        :root {
+            --bg:      #0a0a0a;
+            --bg2:     #141414;
+            --bg3:     #1e1e1e;
+            --border:  #2e2e2e;
+            --text:    #ffffff;
+            --muted:   #888888;
+            --red:     #e50000;
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --t: 0.2s ease;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            min-height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .logo span { font-size: 1.8rem; }
+
+        .subtitle {
+            color: var(--muted);
+            font-size: 0.95rem;
+            margin-bottom: 48px;
+            text-align: center;
+        }
+
+        .options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 560px;
+        }
+
+        .option {
+            display: block;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 24px;
+            text-decoration: none;
+            color: var(--text);
+            transition: border-color var(--t), transform var(--t), box-shadow var(--t);
+        }
+
+        .option:hover {
+            border-color: var(--red);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+
+        .option:focus {
+            outline: none;
+            border-color: var(--red);
+            box-shadow: 0 0 0 3px rgba(229,0,0,0.2);
+        }
+
+        .option-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 16px;
+        }
+
+        .option--controle .option-icon { background: rgba(229,0,0,0.15); color: var(--red); }
+        .option--cinema .option-icon  { background: rgba(34,197,94,0.15); color: var(--green); }
+
+        .option h2 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .option p {
+            font-size: 0.85rem;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+
+        .footer-note {
+            margin-top: 32px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.75rem;
+        }
+        .footer-note a { color: var(--muted); text-decoration: none; }
+        .footer-note a:hover { color: var(--text); text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        <span>🎬</span>
+        MultiTube
+    </div>
+    <p class="subtitle">Escolha como deseja usar o MultiTube</p>
+
+    <div class="options">
+        <a href="/controller" class="option option--controle">
+            <div class="option-icon"><i class="fa-solid fa-mobile-screen-button"></i></div>
+            <h2>Sala de controle</h2>
+            <p>Adicione vídeos, controle mudo e sincronize a reprodução. Use no celular ou no PC para comandar a exibição.</p>
+        </a>
+        <a href="/view" class="option option--cinema">
+            <div class="option-icon"><i class="fa-solid fa-tv"></i></div>
+            <h2>Sala de cinema</h2>
+            <p>Assista ao multiview na TV, no celular ou em qualquer dispositivo. Exibe os vídeos em grid.</p>
+        </a>
+    </div>
+
+    <footer class="footer-note">
+        © 2026 Erick Stelo · <a href="https://github.com/ErickStelo" target="_blank" rel="noopener">GitHub</a> · <a href="https://discord.com/users/252821946625032192" target="_blank" rel="noopener">Discord</a>
+    </footer>
+</body>
+</html>
