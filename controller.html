@@ -2,26 +2,31 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0a0a0a">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     {{GTAG_SNIPPET}}
     <meta name="description" content="Adicione vídeos do YouTube, controle mudo e sincronize a reprodução. Use no celular ou PC para comandar a exibição.">
-    <meta property="og:title" content="Controller">
+    <meta property="og:title" content="Multiview YouTube — Controle remoto">
     <meta property="og:description" content="Adicione vídeos do YouTube, controle mudo e sincronize a reprodução. Use no celular ou PC para comandar a exibição.">
     <meta property="og:image" content="{{SITE_URL}}/assets/logo.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
     <meta property="og:url" content="{{CANONICAL_URL}}">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Controller">
+    <meta name="twitter:title" content="Multiview YouTube — Controle remoto">
     <meta name="twitter:description" content="Adicione vídeos do YouTube, controle mudo e sincronize a reprodução. Use no celular ou PC para comandar a exibição.">
     <meta name="twitter:image" content="{{SITE_URL}}/assets/logo.png">
     <meta name="robots" content="{{META_ROBOTS}}">
     <link rel="canonical" href="{{CANONICAL_URL}}">
     <link rel="icon" href="{{SITE_URL}}/assets/favicon.png" type="image/png">
     <link rel="apple-touch-icon" href="{{SITE_URL}}/assets/favicon.png">
-    <title>Controller</title>
+    <title>Multiview YouTube — Controle remoto</title>
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"WebPage","url":"{{CANONICAL_URL}}","name":"Multiview YouTube — Controle remoto","description":"Adicione vídeos do YouTube, controle mudo e sincronize a reprodução. Use no celular ou PC para comandar a exibição.","inLanguage":"pt-BR"}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -442,7 +447,7 @@
 <!-- Topbar -->
 <div class="topbar">
     <div class="topbar-title">
-        <img src="/assets/logo.png" alt="" class="topbar-logo">
+        <img src="/assets/logo.png" alt="Logo Multiview YouTube" class="topbar-logo" width="28" height="28">
         <span>Controller</span>
         <a href="/" class="topbar-home" title="Voltar ao início"><i class="fas fa-home"></i></a>
     </div>
@@ -792,7 +797,9 @@
                 <div class="video-thumb">
                     <img
                         src="https://img.youtube.com/vi/${videoId}/mqdefault.jpg"
-                        alt="thumb"
+                        alt="Miniatura do vídeo ${i + 1}"
+                        width="60"
+                        height="34"
                         loading="lazy"
                         onerror="this.style.display='none'">
                 </div>

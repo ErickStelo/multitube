@@ -284,6 +284,7 @@ app.get('/c/:code', (req, res) => {
 app.get('/robots.txt', (req, res) => {
     res.type('text/plain');
     res.send(`User-agent: *
+Disallow: /api/
 Allow: /
 
 Sitemap: ${SITE_URL}/sitemap.xml
@@ -296,8 +297,8 @@ app.get('/sitemap.xml', (req, res) => {
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>${SITE_URL}/</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>${SITE_URL}/view</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>${SITE_URL}/controller</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>${SITE_URL}/view</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>${SITE_URL}/controller</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
 </urlset>
 `);
 });
