@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Controller — MultiTube</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+    <style>
+        :root {
+            --bg:      #0a0a0a;
+            --bg2:     #141414;
+            --bg3:     #1e1e1e;
+            --bg4:     #252525;
+            --border:  #2e2e2e;
+            --text:    #ffffff;
+            --muted:   #888888;
+            --red:     #e50000;
+            --red2:    #ff4444;
+            --green:   #22c55e;
+            --blue:    #3b82f6;
+            --yellow:  #f59e0b;
+            --t: 0.2s ease;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* ── Topbar ────────────────────────────── */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .topbar-title {
+            font-size: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ws-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            background: var(--bg3);
+            font-size: 0.75rem;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            transition: var(--t);
+        }
+        .ws-pill.connected    { color: var(--green); border-color: var(--green); }
+        .ws-pill.disconnected { color: var(--red);   border-color: var(--red); }
+        .ws-pill.connecting   { color: var(--yellow); border-color: var(--yellow); }
+
+        .ws-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .ws-pill.connected .ws-dot    { animation: pulse-dot 2s infinite; }
+        .ws-pill.connecting .ws-dot   { animation: blink 0.8s infinite; }
+
+        @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(0.7)} }
+        @keyframes blink      { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+        /* ── Layout principal ──────────────────── */
+        .content {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding-bottom: 100px;
+        }
+
+        /* ── Cards ─────────────────────────────── */
+        .card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-header h2 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+        }
+
+        .card-header h2 i { color: var(--muted); font-size: 0.85rem; }
+
+        .card-body { padding: 16px; }
+
+        /* ── Input ─────────────────────────────── */
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-field {
+            flex: 1;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 12px 14px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            transition: var(--t);
+            min-width: 0;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--red);
+            box-shadow: 0 0 0 3px rgba(229,0,0,0.12);
+        }
+
+        .input-field::placeholder { color: var(--muted); font-size: 0.85rem; }
+
+        /* ── Botões ─────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 11px 18px;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            border: none;
+            cursor: pointer;
+            transition: var(--t);
+            white-space: nowrap;
+            user-select: none;
+        }
+        .btn:active { transform: scale(0.96); }
+
+        .btn-red    { background: var(--red);    color: #fff; }
+        .btn-red:hover { background: var(--red2); }
+
+        .btn-green  { background: var(--green);  color: #000; }
+        .btn-ghost  { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+        .btn-ghost:hover { border-color: var(--red); }
+
+        .btn-sm { padding: 8px 13px; font-size: 0.82rem; border-radius: 8px; }
+
+        .btn-icon {
+            width: 36px; height: 36px;
+            padding: 0;
+            border-radius: 8px;
+            background: var(--bg4);
+            border: 1px solid var(--border);
+            color: var(--text);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            transition: var(--t);
+        }
+        .btn-icon:active { transform: scale(0.92); }
+        .btn-icon:hover  { border-color: var(--red); }
+        .btn-icon.muted   { background: #1a0000; border-color: var(--red); color: var(--red); }
+        .btn-icon.live    { background: #001a0a; border-color: var(--green); color: var(--green); }
+        .btn-icon.focused { background: #1a1400; border-color: var(--yellow); color: var(--yellow); }
+
+        /* ── Sync global ────────────────────────── */
+        .sync-btn-wrap { padding: 0 16px 16px; }
+
+        .btn-sync {
+            width: 100%;
+            padding: 15px;
+            font-size: 1rem;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #1a3a1a, #0f2a0f);
+            border: 1px solid var(--green);
+            color: var(--green);
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: var(--t);
+            letter-spacing: 0.3px;
+        }
+        .btn-sync:active { transform: scale(0.98); }
+        .btn-sync:hover  { background: linear-gradient(135deg, #1f4a1f, #143014); }
+        .btn-sync.syncing i { animation: spin 0.8s linear infinite; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Lista de vídeos ────────────────────── */
+        .video-list { display: flex; flex-direction: column; }
+
+        .video-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 16px;
+            border-bottom: 1px solid var(--border);
+            transition: background var(--t);
+        }
+        .video-item:last-child { border-bottom: none; }
+        .video-item:active { background: var(--bg3); }
+
+        .video-thumb {
+            width: 60px; height: 34px;
+            border-radius: 6px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background: var(--bg4);
+        }
+        .video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+        .video-info { flex: 1; min-width: 0; }
+        .video-id {
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .video-num {
+            font-size: 0.7rem;
+            color: var(--muted);
+            margin-bottom: 2px;
+        }
+
+        .video-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        /* ── Item focado ────────────────────────── */
+        .video-item.is-focused {
+            background: linear-gradient(90deg, #1a1400 0%, var(--bg2) 100%);
+            border-left: 3px solid var(--yellow);
+        }
+
+        .focus-tag {
+            font-size: 0.6rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #2a2000;
+            color: var(--yellow);
+            font-weight: 700;
+            letter-spacing: 0.4px;
+        }
+
+        /* ── Empty state ────────────────────────── */
+        .empty-msg {
+            text-align: center;
+            padding: 30px 20px;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .empty-msg i { font-size: 2rem; display: block; margin-bottom: 10px; opacity: 0.4; }
+
+        /* ── Badge de mute ──────────────────────── */
+        .badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+        }
+        .badge-muted { background: #2a0000; color: var(--red); }
+        .badge-live  { background: #002a0e; color: var(--green); }
+
+        /* ── Toast ──────────────────────────────── */
+        .toasts {
+            position: fixed;
+            top: 70px;
+            right: 12px;
+            left: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 9999;
+            pointer-events: none;
+        }
+        .toast {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: fadeSlide 0.25s ease;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+        }
+        .toast.ok   { border-color: var(--green); }
+        .toast.fail { border-color: var(--red); }
+        .toast.info { border-color: var(--blue); }
+        @keyframes fadeSlide {
+            from { opacity:0; transform: translateY(-10px); }
+            to   { opacity:1; transform: translateY(0); }
+        }
+
+        /* ── Rodapé ──────────────────────────────── */
+        .footer-note {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.75rem;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+    <div class="topbar-title">
+        <i class="fas fa-gamepad" style="color:#e50000"></i> Controller
+    </div>
+    <div class="ws-pill connecting" id="wsPill">
+        <div class="ws-dot"></div>
+        <span id="wsLabel">Conectando</span>
+    </div>
+</div>
+
+<!-- Toasts -->
+<div class="toasts" id="toastContainer"></div>
+
+<!-- Conteúdo -->
+<div class="content">
+
+    <!-- Adicionar vídeo -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-plus-circle"></i> Adicionar Vídeo</h2>
+        </div>
+        <div class="card-body">
+            <div class="input-row">
+                <input
+                    type="url"
+                    class="input-field"
+                    id="urlInput"
+                    placeholder="URL do YouTube (youtu.be/... ou watch?v=...)"
+                    autocomplete="off"
+                    autocorrect="off"
+                    spellcheck="false">
+                <button class="btn btn-red" id="addBtn">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync global -->
+    <button class="btn-sync" id="syncAllBtn">
+        <i class="fas fa-rotate"></i> Sincronizar Todos ao Vivo
+    </button>
+
+    <!-- Lista de vídeos -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-list-video"></i> Vídeos na TV</h2>
+            <span id="videoCount" style="font-size:0.75rem; color:var(--muted)">0 vídeos</span>
+        </div>
+        <div class="video-list" id="videoList">
+            <div class="empty-msg">
+                <i class="fas fa-video-slash"></i>
+                Nenhum vídeo adicionado
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-note">MultiTube Controller · Rede Local</div>
+</div>
+
+<script>
+    // ── Estado ────────────────────────────────────────────────────────
+    let state = { videos: [], muted: [], focusedVideo: null };
+    let ws    = null;
+
+    // ── Toast ─────────────────────────────────────────────────────────
+    function toast(msg, type = 'info', dur = 2500) {
+        const icons = { ok:'✅', fail:'❌', info:'ℹ️', sync:'🔄' };
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.innerHTML = `<span>${icons[type]||icons.info}</span> ${msg}`;
+        document.getElementById('toastContainer').appendChild(el);
+        setTimeout(() => el.remove(), dur);
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────
+    function connectWS() {
+        const proto  = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${proto}://${location.host}`);
+        const pill  = document.getElementById('wsPill');
+        const label = document.getElementById('wsLabel');
+
+        pill.className   = 'ws-pill connecting';
+        label.textContent = 'Conectando';
+
+        ws.onopen = () => {
+            pill.className   = 'ws-pill connected';
+            label.textContent = 'Conectado';
+            ws.send(JSON.stringify({ type: 'get_state' }));
+        };
+
+        ws.onmessage = ({ data }) => {
+            try { handleMessage(JSON.parse(data)); }
+            catch(e) { console.error(e); }
+        };
+
+        ws.onclose = () => {
+            pill.className   = 'ws-pill disconnected';
+            label.textContent = 'Reconectando...';
+            setTimeout(connectWS, 3000);
+        };
+
+        ws.onerror = () => ws.close();
+    }
+
+    function send(obj) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(obj));
+        } else {
+            toast('Sem conexão com o servidor', 'fail');
+        }
+    }
+
+    // ── Mensagens recebidas ───────────────────────────────────────────
+    function handleMessage(msg) {
+        if (msg.type === 'state') {
+            state = {
+                videos: msg.videos || [],
+                muted: msg.muted || [],
+                focusedVideo: msg.focusedVideo !== undefined ? msg.focusedVideo : null
+            };
+            renderList();
+        }
+        if (msg.type === 'toggle_mute') {
+            state.muted[msg.index] = msg.muted;
+            renderList();
+        }
+        if (msg.type === 'focus_video') {
+            state.focusedVideo = msg.index;
+            if (msg.muted) state.muted = msg.muted;
+            renderList();
+        }
+        if (msg.type === 'error') {
+            toast(msg.message, 'fail');
+        }
+    }
+
+    // ── Extrair videoId ───────────────────────────────────────────────
+    function extractId(url) {
+        url = url.trim();
+        const pats = [
+            /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+            /^([a-zA-Z0-9_-]{11})$/
+        ];
+        for (const p of pats) {
+            const m = url.match(p);
+            if (m) return m[1];
+        }
+        return null;
+    }
+
+    // ── Adicionar vídeo ───────────────────────────────────────────────
+    function addVideo() {
+        const input = document.getElementById('urlInput');
+        const url   = input.value.trim();
+        if (!url) { toast('Cole uma URL do YouTube', 'fail'); return; }
+
+        const id = extractId(url);
+        if (!id) { toast('URL inválida. Use youtu.be/ID ou watch?v=ID', 'fail'); return; }
+        if (state.videos.includes(id)) { toast('Vídeo já está na lista', 'fail'); return; }
+
+        send({ type: 'add_video', url });
+        input.value = '';
+        input.blur();
+        toast('Vídeo adicionado!', 'ok');
+    }
+
+    // ── Remover vídeo ─────────────────────────────────────────────────
+    function removeVideo(index) {
+        if (!confirm(`Remover vídeo ${index + 1}?`)) return;
+        send({ type: 'remove_video', index });
+        toast('Vídeo removido', 'info');
+    }
+
+    // ── Toggle mute ───────────────────────────────────────────────────
+    function toggleMute(index) {
+        send({ type: 'toggle_mute', index });
+    }
+
+    // ── Sync individual ───────────────────────────────────────────────
+    function syncVideo(index) {
+        send({ type: 'sync_video', index });
+        toast(`Vídeo ${index + 1} sincronizado ▶`, 'sync');
+    }
+
+    // ── Fullscreen / foco ─────────────────────────────────────────────
+    function focusVideo(index) {
+        if (state.focusedVideo === index) {
+            // Já está focado → sair do fullscreen
+            send({ type: 'focus_video', index: null });
+            toast('Saindo do modo tela cheia', 'info');
+        } else {
+            send({ type: 'focus_video', index });
+            toast(`Vídeo ${index + 1} em tela cheia 🔊`, 'ok');
+        }
+    }
+
+    // ── Sync all ──────────────────────────────────────────────────────
+    function syncAll() {
+        const btn = document.getElementById('syncAllBtn');
+        btn.classList.add('syncing');
+        send({ type: 'sync_all' });
+        toast('Todos sincronizados ao vivo 🔴', 'sync', 3000);
+        setTimeout(() => btn.classList.remove('syncing'), 1500);
+    }
+
+    // ── Renderizar lista ──────────────────────────────────────────────
+    function renderList() {
+        const list  = document.getElementById('videoList');
+        const count = document.getElementById('videoCount');
+        count.textContent = `${state.videos.length} vídeo${state.videos.length !== 1 ? 's' : ''}`;
+
+        if (!state.videos.length) {
+            list.innerHTML = `
+                <div class="empty-msg">
+                    <i class="fas fa-video-slash"></i>
+                    Nenhum vídeo adicionado
+                </div>`;
+            return;
+        }
+
+        list.innerHTML = '';
+        state.videos.forEach((videoId, i) => {
+            const muted   = state.muted[i] !== false;
+            const focused = state.focusedVideo === i;
+
+            const item = document.createElement('div');
+            item.className = `video-item${focused ? ' is-focused' : ''}`;
+            item.innerHTML = `
+                <div class="video-thumb">
+                    <img
+                        src="https://img.youtube.com/vi/${videoId}/mqdefault.jpg"
+                        alt="thumb"
+                        loading="lazy"
+                        onerror="this.style.display='none'">
+                </div>
+                <div class="video-info">
+                    <div class="video-num" style="display:flex;align-items:center;gap:6px;">
+                        Vídeo ${i + 1}
+                        ${focused ? '<span class="focus-tag">⛶ TELA CHEIA</span>' : ''}
+                    </div>
+                    <div class="video-id">${videoId}</div>
+                    <span class="badge ${muted ? 'badge-muted' : 'badge-live'}">
+                        ${muted ? '🔇 MUDO' : '🔴 AO VIVO'}
+                    </span>
+                </div>
+                <div class="video-actions">
+                    <!-- Fullscreen -->
+                    <button
+                        class="btn-icon ${focused ? 'focused' : ''}"
+                        title="${focused ? 'Sair da tela cheia' : 'Tela cheia + ativar áudio'}"
+                        onclick="focusVideo(${i})">
+                        <i class="fas ${focused ? 'fa-compress' : 'fa-expand'}"></i>
+                    </button>
+                    <!-- Mute/Unmute -->
+                    <button
+                        class="btn-icon ${muted ? 'muted' : 'live'}"
+                        title="${muted ? 'Ativar áudio' : 'Mutar'}"
+                        onclick="toggleMute(${i})">
+                        <i class="fas ${muted ? 'fa-volume-xmark' : 'fa-volume-high'}"></i>
+                    </button>
+                    <!-- Sync ao vivo -->
+                    <button
+                        class="btn-icon"
+                        title="Sincronizar ao vivo"
+                        onclick="syncVideo(${i})"
+                        style="color:var(--green); border-color:var(--border)">
+                        <i class="fas fa-rotate"></i>
+                    </button>
+                    <!-- Remover -->
+                    <button
+                        class="btn-icon"
+                        title="Remover vídeo"
+                        onclick="removeVideo(${i})"
+                        style="color:var(--red); border-color:var(--border)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>`;
+            list.appendChild(item);
+        });
+    }
+
+    // ── Event listeners ───────────────────────────────────────────────
+    document.getElementById('addBtn').addEventListener('click', addVideo);
+    document.getElementById('urlInput').addEventListener('keypress', e => {
+        if (e.key === 'Enter') addVideo();
+    });
+    document.getElementById('syncAllBtn').addEventListener('click', syncAll);
+
+    // ── Init ──────────────────────────────────────────────────────────
+    connectWS();
+</script>
+</body>
+</html>
+

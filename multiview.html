@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>MultiTube — TV</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --bg2: #141414;
+            --bg3: #1e1e1e;
+            --border: #2a2a2a;
+            --text: #ffffff;
+            --muted: #888;
+            --red: #e50000;
+            --green: #22c55e;
+            --transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Topo ────────────────────────────────── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            gap: 12px;
+        }
+
+        .topbar-title {
+            font-size: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .topbar-title span { font-size: 1.2rem; }
+
+        .ws-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .ws-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #444;
+            transition: var(--transition);
+        }
+
+        .ws-dot.connected   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .ws-dot.connecting  { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; animation: blink 1s infinite; }
+        .ws-dot.disconnected{ background: var(--red); }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        /* ── Grid de vídeos ─────────────────────── */
+        .videos-grid {
+            flex: 1;
+            display: grid;
+            gap: 12px;
+            padding: 12px;
+            overflow: hidden;
+        }
+
+        /* colunas dinâmicas por JS */
+        .video-cell {
+            position: relative;
+            background: var(--bg3);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid transparent;
+            transition: border-color var(--transition);
+        }
+
+        .video-cell.muted-border { border-color: var(--border); }
+        .video-cell.active-border { border-color: var(--green); }
+
+        .video-cell iframe {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Overlay de mute */
+        .mute-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(6px);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            z-index: 20;
+            opacity: 0;
+            transition: opacity var(--transition);
+        }
+
+        .mute-overlay.visible { opacity: 1; }
+        .mute-overlay.is-muted { color: #f87171; }
+        .mute-overlay.is-live  { color: var(--green); }
+
+        /* Status indicator */
+        .live-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: blink 1.5s infinite;
+        }
+
+        /* Toast de notificações */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 9999;
+        }
+
+        .toast {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .toast.success { border-color: var(--green); }
+        .toast.error   { border-color: var(--red); }
+        .toast.info    { border-color: #3b82f6; }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(30px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        /* Estado vazio */
+        .empty-state {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            color: var(--muted);
+            height: 100%;
+        }
+
+        .empty-state .icon { font-size: 4rem; opacity: 0.3; }
+
+        /* Portrait: 1 coluna */
+        @media (orientation: portrait) {
+            .videos-grid { grid-template-columns: 1fr !important; }
+        }
+
+        /* ── Modo Fullscreen ─────────────────────── */
+        .videos-grid.focused-mode .video-cell:not(.focused) {
+            display: none;
+        }
+
+        .videos-grid.focused-mode {
+            grid-template-columns: 1fr !important;
+            grid-template-rows: 1fr !important;
+        }
+
+        .video-cell.focused {
+            border-color: #f59e0b !important;
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+        }
+
+        /* Banner de fullscreen no topo do vídeo */
+        .focus-banner {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(245,158,11,0.9);
+            color: #000;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            z-index: 25;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            letter-spacing: 0.3px;
+            animation: focusBannerIn 0.3s ease;
+        }
+
+        @keyframes focusBannerIn {
+            from { opacity: 0; transform: scale(0.85); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="topbar-title">
+        <span>📺</span> MultiTube
+    </div>
+    <div class="ws-status">
+        <div class="ws-dot connecting" id="wsDot"></div>
+        <span id="wsLabel">Conectando...</span>
+    </div>
+</div>
+
+<div class="videos-grid" id="videosGrid">
+    <div class="empty-state">
+        <div class="icon">🎬</div>
+        <p>Aguardando vídeos do controller...</p>
+    </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+    // ── Suprimir avisos de service worker ─────────────────────────────
+    const _warn = console.warn;
+    console.warn = (...a) => {
+        if (typeof a[0] === 'string' && a[0].includes('service worker')) return;
+        _warn(...a);
+    };
+
+    // ── Estado local ──────────────────────────────────────────────────
+    let state    = { videos: [], muted: [], focusedVideo: null };
+    let players  = {};
+    let ytReady  = false;
+    let ws       = null;
+
+    // ── Toast ─────────────────────────────────────────────────────────
+    function toast(msg, type = 'info', duration = 3000) {
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        const icons = { success: '✅', error: '❌', info: 'ℹ️', sync: '🔄' };
+        el.innerHTML = `<span>${icons[type] || icons.info}</span> ${msg}`;
+        document.getElementById('toastContainer').appendChild(el);
+        setTimeout(() => el.remove(), duration);
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────
+    function connectWS() {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${proto}://${location.host}`);
+        const dot   = document.getElementById('wsDot');
+        const label = document.getElementById('wsLabel');
+
+        dot.className   = 'ws-dot connecting';
+        label.textContent = 'Conectando...';
+
+        ws.onopen = () => {
+            dot.className   = 'ws-dot connected';
+            label.textContent = 'Conectado';
+            ws.send(JSON.stringify({ type: 'get_state' }));
+        };
+
+        ws.onmessage = ({ data }) => {
+            try { handleMessage(JSON.parse(data)); }
+            catch(e) { console.error('WS parse error', e); }
+        };
+
+        ws.onclose = () => {
+            dot.className   = 'ws-dot disconnected';
+            label.textContent = 'Desconectado — reconectando...';
+            setTimeout(connectWS, 3000);
+        };
+
+        ws.onerror = () => ws.close();
+    }
+
+    // ── Processar mensagens do servidor ───────────────────────────────
+    function handleMessage(msg) {
+        switch (msg.type) {
+
+            case 'state':
+                state = {
+                    videos: msg.videos || [],
+                    muted: msg.muted || [],
+                    focusedVideo: msg.focusedVideo !== undefined ? msg.focusedVideo : null
+                };
+                renderGrid();
+                break;
+
+            case 'toggle_mute':
+                state.muted[msg.index] = msg.muted;
+                applyMute(msg.index, msg.muted);
+                break;
+
+            case 'sync_video':
+                seekToLive(msg.index);
+                toast(`Vídeo ${msg.index + 1} sincronizado ao vivo`, 'sync');
+                break;
+
+            case 'sync_all':
+                state.videos.forEach((_, i) => seekToLive(i));
+                toast('Todos os vídeos sincronizados ao vivo', 'sync');
+                break;
+
+            case 'focus_video':
+                state.focusedVideo = msg.index;
+                if (msg.muted) state.muted = msg.muted;
+                applyFocusMode();
+                // Aplicar mutes conforme novo estado
+                state.muted.forEach((muted, i) => applyMute(i, muted));
+                if (msg.index !== null) {
+                    toast(`Vídeo ${msg.index + 1} em tela cheia 🔊`, 'success');
+                } else {
+                    toast('Saindo do modo tela cheia', 'info');
+                }
+                break;
+        }
+    }
+
+    // ── Ir ao vivo ────────────────────────────────────────────────────
+    function seekToLive(index) {
+        const key = `video_${index}`;
+        const p   = players[key];
+        if (!p) return;
+        try {
+            if (typeof p.seekTo === 'function') p.seekTo(9999999, true);
+            if (typeof p.playVideo === 'function') p.playVideo();
+        } catch(e) { console.error('seekToLive error', e); }
+    }
+
+    // ── Aplicar mute ──────────────────────────────────────────────────
+    function applyMute(index, muted) {
+        const key = `video_${index}`;
+        const p   = players[key];
+        if (p) {
+            try {
+                if (muted) p.mute?.();
+                else       p.unMute?.();
+            } catch(e) {}
+        }
+        const overlay = document.getElementById(`overlay_${index}`);
+        if (overlay) {
+            if (muted) {
+                overlay.className = 'mute-overlay visible is-muted';
+                overlay.innerHTML = '🔇 MUDO';
+            } else {
+                overlay.className = 'mute-overlay visible is-live';
+                overlay.innerHTML = '<div class="live-dot"></div> AO VIVO';
+                setTimeout(() => { overlay.classList.remove('visible'); }, 3000);
+            }
+        }
+    }
+
+    // ── Aplicar / remover modo fullscreen ────────────────────────────
+    function applyFocusMode() {
+        const grid    = document.getElementById('videosGrid');
+        const focused = state.focusedVideo;
+        const cells   = document.querySelectorAll('.video-cell');
+
+        // Remover banners antigos
+        document.querySelectorAll('.focus-banner').forEach(b => b.remove());
+
+        if (focused === null || focused === undefined) {
+            grid.classList.remove('focused-mode');
+            cells.forEach(cell => cell.classList.remove('focused'));
+            // Restaurar layout original
+            grid.style.gridTemplateColumns = `repeat(${getColumns(state.videos.length)}, 1fr)`;
+            grid.style.gridTemplateRows = '';
+        } else {
+            grid.classList.add('focused-mode');
+            cells.forEach((cell, i) => {
+                if (i === focused) {
+                    cell.classList.add('focused');
+                    // Adicionar banner visual
+                    const banner = document.createElement('div');
+                    banner.className = 'focus-banner';
+                    banner.innerHTML = '⛶ TELA CHEIA &nbsp;·&nbsp; 🔊 AO VIVO';
+                    cell.appendChild(banner);
+                } else {
+                    cell.classList.remove('focused');
+                }
+            });
+        }
+    }
+
+    // ── Calcular colunas do grid ──────────────────────────────────────
+    function getColumns(n) {
+        if (n <= 1) return 1;
+        if (n <= 2) return 2;
+        if (n <= 4) return 2;
+        if (n <= 6) return 3;
+        return 4;
+    }
+
+    // ── Renderizar grid de vídeos ─────────────────────────────────────
+    function renderGrid() {
+        const grid = document.getElementById('videosGrid');
+        grid.innerHTML = '';
+        players = {};
+
+        if (!state.videos.length) {
+            grid.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">🎬</div>
+                    <p>Aguardando vídeos do controller...</p>
+                </div>`;
+            return;
+        }
+
+        const cols = getColumns(state.videos.length);
+        grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+        state.videos.forEach((videoId, i) => {
+            const cell = document.createElement('div');
+            cell.className = 'video-cell muted-border';
+            cell.id = `cell_${i}`;
+            cell.innerHTML = `
+                <div class="mute-overlay visible is-muted" id="overlay_${i}">🔇 MUDO</div>
+                <iframe
+                    id="video_${i}"
+                    src="https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&enablejsapi=1&controls=1&rel=0&modestbranding=1&origin=${location.origin}"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+                </iframe>`;
+            grid.appendChild(cell);
+        });
+
+        // Aguardar API do YT
+        if (ytReady) initPlayers();
+
+        // Restaurar modo fullscreen se estava ativo
+        if (state.focusedVideo !== null) {
+            setTimeout(() => applyFocusMode(), 50);
+        }
+    }
+
+    // ── Inicializar players do YT ─────────────────────────────────────
+    function initPlayers() {
+        state.videos.forEach((videoId, i) => {
+            const el = document.getElementById(`video_${i}`);
+            if (!el || players[`video_${i}`]) return;
+
+            players[`video_${i}`] = new YT.Player(`video_${i}`, {
+                videoId,
+                playerVars: {
+                    autoplay: 1, mute: 1, enablejsapi: 1,
+                    controls: 1, rel: 0, modestbranding: 1,
+                    origin: location.origin
+                },
+                events: {
+                    onReady: (e) => {
+                        e.target.mute();
+                        e.target.playVideo();
+                        if (!state.muted[i]) {
+                            setTimeout(() => applyMute(i, false), 500);
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    // ── YouTube IFrame API ────────────────────────────────────────────
+    window.onYouTubeIframeAPIReady = () => {
+        ytReady = true;
+        if (state.videos.length) initPlayers();
+    };
+
+    const ytScript = document.createElement('script');
+    ytScript.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(ytScript);
+
+    // ── Iniciar conexão ───────────────────────────────────────────────
+    connectWS();
+</script>
+</body>
+</html>
