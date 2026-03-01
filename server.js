@@ -27,6 +27,34 @@ const ROOM_IDLE_TIMEOUT_MS = process.env.ROOM_IDLE_TIMEOUT_MS
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+const SITE_URL = (process.env.SITE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+const GTAG_SNIPPET_RAW = `<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-X4ZH2142WK"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-X4ZH2142WK');
+</script>
+`;
+const GTAG_SNIPPET = isProduction ? GTAG_SNIPPET_RAW : '';
+
+function serveHtml(fileName, replacements, res) {
+    const filePath = path.join(__dirname, fileName);
+    fs.readFile(filePath, 'utf8', (err, data) => {
+        if (err) {
+            res.status(500).send('Erro ao carregar página');
+            return;
+        }
+        let html = data;
+        Object.keys(replacements).forEach((key) => {
+            html = html.split(key).join(replacements[key]);
+        });
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(html);
+    });
+}
+
 function log(level, message, meta = {}) {
     const payload = { timestamp: new Date().toISOString(), level, message, ...meta };
     if (isProduction) {
@@ -199,11 +227,21 @@ app.get('/health', (req, res) => {
 app.use(limiter);
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    serveHtml('index.html', {
+        '{{SITE_URL}}': SITE_URL,
+        '{{CANONICAL_URL}}': `${SITE_URL}/`,
+        '{{META_ROBOTS}}': 'index, follow',
+        '{{GTAG_SNIPPET}}': GTAG_SNIPPET,
+    }, res);
 });
 
 app.get('/view', (req, res) => {
-    res.sendFile(path.join(__dirname, 'multiview.html'));
+    serveHtml('multiview.html', {
+        '{{SITE_URL}}': SITE_URL,
+        '{{CANONICAL_URL}}': `${SITE_URL}/view`,
+        '{{META_ROBOTS}}': 'index, follow',
+        '{{GTAG_SNIPPET}}': GTAG_SNIPPET,
+    }, res);
 });
 
 app.get('/view/:code', (req, res) => {
@@ -212,11 +250,21 @@ app.get('/view/:code', (req, res) => {
         res.redirect('/view');
         return;
     }
-    res.sendFile(path.join(__dirname, 'multiview.html'));
+    serveHtml('multiview.html', {
+        '{{SITE_URL}}': SITE_URL,
+        '{{CANONICAL_URL}}': `${SITE_URL}/view/${code}`,
+        '{{META_ROBOTS}}': 'noindex, follow',
+        '{{GTAG_SNIPPET}}': GTAG_SNIPPET,
+    }, res);
 });
 
 app.get('/controller', (req, res) => {
-    res.sendFile(path.join(__dirname, 'controller.html'));
+    serveHtml('controller.html', {
+        '{{SITE_URL}}': SITE_URL,
+        '{{CANONICAL_URL}}': `${SITE_URL}/controller`,
+        '{{META_ROBOTS}}': 'index, follow',
+        '{{GTAG_SNIPPET}}': GTAG_SNIPPET,
+    }, res);
 });
 
 app.get('/c/:code', (req, res) => {
@@ -225,7 +273,33 @@ app.get('/c/:code', (req, res) => {
         res.redirect('/controller');
         return;
     }
-    res.sendFile(path.join(__dirname, 'controller.html'));
+    serveHtml('controller.html', {
+        '{{SITE_URL}}': SITE_URL,
+        '{{CANONICAL_URL}}': `${SITE_URL}/c/${code}`,
+        '{{META_ROBOTS}}': 'noindex, follow',
+        '{{GTAG_SNIPPET}}': GTAG_SNIPPET,
+    }, res);
+});
+
+app.get('/robots.txt', (req, res) => {
+    res.type('text/plain');
+    res.send(`User-agent: *
+Allow: /
+
+Sitemap: ${SITE_URL}/sitemap.xml
+`);
+});
+
+app.get('/sitemap.xml', (req, res) => {
+    const lastmod = new Date().toISOString().slice(0, 10);
+    res.type('application/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${SITE_URL}/</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>${SITE_URL}/view</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>${SITE_URL}/controller</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+</urlset>
+`);
 });
 
 app.get('/api/state', (req, res) => {

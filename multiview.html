@@ -4,7 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0a0a0a">
-    <title>MultiTube — TV</title>
+    {{GTAG_SNIPPET}}
+    <meta name="description" content="Assista ao multiview na TV ou em qualquer dispositivo. Exibe os vídeos em grid sincronizado.">
+    <meta property="og:title" content="TV">
+    <meta property="og:description" content="Assista ao multiview na TV ou em qualquer dispositivo. Exibe os vídeos em grid sincronizado.">
+    <meta property="og:image" content="{{SITE_URL}}/assets/logo.png">
+    <meta property="og:url" content="{{CANONICAL_URL}}">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="TV">
+    <meta name="twitter:description" content="Assista ao multiview na TV ou em qualquer dispositivo. Exibe os vídeos em grid sincronizado.">
+    <meta name="twitter:image" content="{{SITE_URL}}/assets/logo.png">
+    <meta name="robots" content="{{META_ROBOTS}}">
+    <link rel="canonical" href="{{CANONICAL_URL}}">
+    <link rel="icon" href="{{SITE_URL}}/assets/favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="{{SITE_URL}}/assets/favicon.png">
+    <title>TV</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -52,6 +67,12 @@
             align-items: center;
             gap: 8px;
             white-space: nowrap;
+        }
+
+        .topbar-logo {
+            height: 28px;
+            width: auto;
+            display: block;
         }
 
         .topbar-title span { font-size: 1.2rem; }
@@ -358,7 +379,8 @@
 
 <div class="topbar">
     <div class="topbar-title">
-        <span>📺</span> <span id="topbarTitle">MultiTube</span>
+        <img src="/assets/logo.png" alt="" class="topbar-logo">
+        <span id="topbarTitle"></span>
         <a href="/" class="topbar-home" title="Voltar ao início">🏠 Início</a>
     </div>
     <div class="ws-status" id="wsStatus">
@@ -699,7 +721,7 @@
 
     function updateTopbarTitle() {
         const el = document.getElementById('topbarTitle');
-        if (el) el.textContent = state.roomName ? `MultiTube · ${state.roomName}` : 'MultiTube';
+        if (el) el.textContent = state.roomName || '';
     }
 
     // ── Renderizar grid de vídeos ─────────────────────────────────────

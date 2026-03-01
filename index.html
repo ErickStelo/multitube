@@ -4,7 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0a0a0a">
-    <title>MultiTube — Início</title>
+    {{GTAG_SNIPPET}}
+    <meta name="description" content="Escolha como deseja usar: sala de controle para comandar vídeos ou sala de cinema para assistir em multiview.">
+    <meta property="og:title" content="Início">
+    <meta property="og:description" content="Escolha como deseja usar: sala de controle para comandar vídeos ou sala de cinema para assistir em multiview.">
+    <meta property="og:image" content="{{SITE_URL}}/assets/logo.png">
+    <meta property="og:url" content="{{CANONICAL_URL}}">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Início">
+    <meta name="twitter:description" content="Escolha como deseja usar: sala de controle para comandar vídeos ou sala de cinema para assistir em multiview.">
+    <meta name="twitter:image" content="{{SITE_URL}}/assets/logo.png">
+    <meta name="robots" content="{{META_ROBOTS}}">
+    <link rel="canonical" href="{{CANONICAL_URL}}">
+    <link rel="icon" href="{{SITE_URL}}/assets/favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="{{SITE_URL}}/assets/favicon.png">
+    <title>Início</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -46,7 +61,21 @@
             font-weight: 700;
         }
 
-        .logo span { font-size: 1.8rem; }
+        .logo-img {
+            height: 48px;
+            width: auto;
+            display: block;
+        }
+
+        .tagline {
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-align: center;
+            max-width: 320px;
+            line-height: 1.5;
+            margin-top: 12px;
+            margin-bottom: 32px;
+        }
 
         .subtitle {
             color: var(--muted);
@@ -124,10 +153,10 @@
 </head>
 <body>
     <div class="logo">
-        <span>🎬</span>
-        MultiTube
+        <img src="/assets/logo.png" alt="" class="logo-img">
     </div>
-    <p class="subtitle">Escolha como deseja usar o MultiTube</p>
+    <p class="tagline">Assista a vários vídeos do YouTube em sincronia. Crie uma sala, compartilhe o código e controle a reprodução pelo celular ou pela TV.</p>
+    <p class="subtitle">Escolha como deseja usar</p>
 
     <div class="options">
         <a href="/controller" class="option option--controle">

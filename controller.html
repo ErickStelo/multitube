@@ -6,7 +6,22 @@
     <meta name="theme-color" content="#0a0a0a">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>Controller — MultiTube</title>
+    {{GTAG_SNIPPET}}
+    <meta name="description" content="Adicione vídeos do YouTube, controle mudo e sincronize a reprodução. Use no celular ou PC para comandar a exibição.">
+    <meta property="og:title" content="Controller">
+    <meta property="og:description" content="Adicione vídeos do YouTube, controle mudo e sincronize a reprodução. Use no celular ou PC para comandar a exibição.">
+    <meta property="og:image" content="{{SITE_URL}}/assets/logo.png">
+    <meta property="og:url" content="{{CANONICAL_URL}}">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Controller">
+    <meta name="twitter:description" content="Adicione vídeos do YouTube, controle mudo e sincronize a reprodução. Use no celular ou PC para comandar a exibição.">
+    <meta name="twitter:image" content="{{SITE_URL}}/assets/logo.png">
+    <meta name="robots" content="{{META_ROBOTS}}">
+    <link rel="canonical" href="{{CANONICAL_URL}}">
+    <link rel="icon" href="{{SITE_URL}}/assets/favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="{{SITE_URL}}/assets/favicon.png">
+    <title>Controller</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -58,6 +73,11 @@
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+        .topbar-logo {
+            height: 28px;
+            width: auto;
+            display: block;
         }
         .topbar-home {
             color: var(--muted);
@@ -422,7 +442,8 @@
 <!-- Topbar -->
 <div class="topbar">
     <div class="topbar-title">
-        <i class="fas fa-gamepad" style="color:#e50000"></i> Controller
+        <img src="/assets/logo.png" alt="" class="topbar-logo">
+        <span>Controller</span>
         <a href="/" class="topbar-home" title="Voltar ao início"><i class="fas fa-home"></i></a>
     </div>
     <div class="ws-pill connecting" id="wsPill">
@@ -516,7 +537,7 @@
         </div>
     </div>
 
-    <div class="footer-note">MultiTube Controller · Salas por código</div>
+    <div class="footer-note">Controller · Salas por código</div>
     <div class="footer-note">
         © 2026 Erick Stelo · <a href="https://github.com/ErickStelo" target="_blank" rel="noopener">GitHub</a> · <a href="https://discord.com/users/252821946625032192" target="_blank" rel="noopener">Discord</a> · <a href="/">Voltar ao início</a>
     </div>
